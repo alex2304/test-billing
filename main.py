@@ -40,9 +40,15 @@ async def get_client(client_id: int) -> ClientResponse:
 @app.post("/client/{client_id}/topup")
 async def top_up_client_balance(client_id: int, body: TopUpRequest) -> ClientResponse:
     conn = await asyncpg.connect(user="postgres", password="postgres", database="postgres", host="127.0.0.1")
-    record: asyncpg.Record = await conn.fetchrow(
-        "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2 RETURNING id, balance", body.amount, client_id
-    )
+    async with conn.transaction():
+        record: asyncpg.Record = await conn.fetchrow(
+            "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2 RETURNING id, balance",
+            body.amount,
+            client_id,
+        )
+        await conn.execute(
+            "INSERT INTO refill_history(client_id, amount) VALUES ($1, $2)", client_id, body.amount,
+        )
     await conn.close()
     return ClientResponse(id=record["id"], balance=record["balance"])
 
@@ -51,19 +57,19 @@ async def top_up_client_balance(client_id: int, body: TopUpRequest) -> ClientRes
 async def transfer_money(sender_id: int, body: TransferRequest) -> ClientResponse:
     conn = await asyncpg.connect(user="postgres", password="postgres", database="postgres", host="127.0.0.1")
     async with conn.transaction():
+        record = await conn.fetchrow(
+            "UPDATE client_wallet SET balance = balance - $1 WHERE id = $2 RETURNING id, balance",
+            body.amount,
+            sender_id,
+        )
+        await conn.execute(
+            "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2", body.amount, body.receiver_id
+        )
         await conn.execute(
             "INSERT INTO transaction_history(receiver_id, sender_id, amount) VALUES ($1, $2, $3)",
             body.receiver_id,
             sender_id,
             body.amount,
-        )
-        await conn.execute(
-            "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2", body.amount, body.receiver_id
-        )
-        record = await conn.fetchrow(
-            "UPDATE client_wallet SET balance = balance - $1 WHERE id = $2 RETURNING id, balance",
-            body.amount,
-            sender_id,
         )
     await conn.close()
     return ClientResponse(id=record["id"], balance=record["balance"])
