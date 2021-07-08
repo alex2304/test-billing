@@ -10,6 +10,6 @@ class TransferRequest(BaseModel):
     amount: float
 
 
-class ClientResponse(BaseModel):
+class ClientData(BaseModel):
     id: int
     balance: float
