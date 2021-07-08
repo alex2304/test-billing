@@ -1,25 +1,12 @@
 import asyncpg
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import APIRouter
 
-app = FastAPI()
+from models import ClientResponse, TopUpRequest, TransferRequest
 
-
-class TopUpRequest(BaseModel):
-    amount: float
+router = APIRouter()
 
 
-class TransferRequest(BaseModel):
-    receiver_id: int
-    amount: float
-
-
-class ClientResponse(BaseModel):
-    id: int
-    balance: float
-
-
-@app.post("/client/")
+@router.post("/client/", response_model=ClientResponse)
 async def create_client() -> ClientResponse:
     conn = await asyncpg.connect(user="postgres", password="postgres", database="postgres", host="127.0.0.1")
     record: asyncpg.Record = await conn.fetchrow(
@@ -29,16 +16,16 @@ async def create_client() -> ClientResponse:
     return ClientResponse(id=record["id"], balance=record["balance"])
 
 
-@app.get("/client/{client_id}")
-async def get_client(client_id: int) -> ClientResponse:
+@router.get("/client/{client_id}", response_model=ClientResponse)
+async def get_client(client_id: int):
     conn = await asyncpg.connect(user="postgres", password="postgres", database="postgres", host="127.0.0.1")
     record: asyncpg.Record = await conn.fetchrow("SELECT id, balance FROM client_wallet WHERE id = $1", client_id)
     await conn.close()
     return ClientResponse(id=record["id"], balance=record["balance"])
 
 
-@app.post("/client/{client_id}/topup")
-async def top_up_client_balance(client_id: int, body: TopUpRequest) -> ClientResponse:
+@router.post("/client/{client_id}/topup", response_model=ClientResponse)
+async def top_up_client_balance(client_id: int, body: TopUpRequest):
     conn = await asyncpg.connect(user="postgres", password="postgres", database="postgres", host="127.0.0.1")
     async with conn.transaction():
         record: asyncpg.Record = await conn.fetchrow(
@@ -53,8 +40,8 @@ async def top_up_client_balance(client_id: int, body: TopUpRequest) -> ClientRes
     return ClientResponse(id=record["id"], balance=record["balance"])
 
 
-@app.post("/client/{sender_id}/transfer")
-async def transfer_money(sender_id: int, body: TransferRequest) -> ClientResponse:
+@router.post("/client/{sender_id}/transfer", response_model=ClientResponse)
+async def transfer_money(sender_id: int, body: TransferRequest):
     conn = await asyncpg.connect(user="postgres", password="postgres", database="postgres", host="127.0.0.1")
     async with conn.transaction():
         record = await conn.fetchrow(
