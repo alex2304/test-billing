@@ -1,6 +1,3 @@
--- CREATE USER postgres WITH SUPERUSER PASSWORD 'postgres';
--- ALTER DATABASE postgres OWNER TO postgres;
-
 CREATE TABLE client_wallet (
     id serial primary key,
     balance float default 0
@@ -20,7 +17,3 @@ CREATE TABLE refill_history (
     client_id integer REFERENCES client_wallet (id),
     amount float
 );
-
--- DROP TABLE client_wallet CASCADE;
--- DROP TABLE transaction_history;
--- DROP TABLE refill_history;

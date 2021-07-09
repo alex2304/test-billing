@@ -10,8 +10,8 @@ RUN apk update && apk add --no-cache --virtual .build-deps gcc libc-dev libxslt-
     pip install --no-cache-dir -r requirements.txt && \
     apk --purge del .build-deps
 
-RUN apk add curl
-
 COPY ./src .
 
-EXPOSE 8000
+COPY pytest.ini .
+RUN pytest
+RUN rm test_routes.py pytest.ini requirements.txt
