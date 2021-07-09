@@ -8,6 +8,10 @@ from utils import get_asyncpg_connection
 
 
 async def create_client() -> ClientData:
+    """Create a new client wallet.
+
+    :return: ClientData
+    """
     async with get_asyncpg_connection() as conn:
         record: asyncpg.Record = await conn.fetchrow(
             "INSERT INTO client_wallet(balance) VALUES (DEFAULT) RETURNING id, balance;"
@@ -16,12 +20,26 @@ async def create_client() -> ClientData:
 
 
 async def get_client_by_id(client_id: int) -> Optional[ClientData]:
+    """Retrieve client by id.
+
+    :param client_id:
+    :return: ClientData or None, if client with such id is not found
+    """
     async with get_asyncpg_connection() as conn:
         record: asyncpg.Record = await conn.fetchrow("SELECT id, balance FROM client_wallet WHERE id = $1", client_id)
     return ClientData(id=record["id"], balance=record["balance"]) if record is not None else None
 
 
 async def top_up_client_balance(client_id: int, *, amount: float) -> Optional[ClientData]:
+    """Refill client balance.
+
+    Refill history entry is saved.
+
+    :param client_id:
+    :param amount:
+
+    :return: ClientData - updated client wallet data, or None, if client with such id is not found
+    """
     async with get_asyncpg_connection() as conn:
         try:
             async with conn.transaction():
@@ -44,6 +62,22 @@ async def top_up_client_balance(client_id: int, *, amount: float) -> Optional[Cl
 
 
 async def transfer_money(sender_id: int, *, receiver_id: int, amount: float) -> Optional[ClientData]:
+    """Transfer money from sender to receiver.
+
+    Sender and receiver accounts must be different.
+    Sender must have enought money to transfer.
+
+    Parameters:
+        :param sender_id:
+        :param receiver_id:
+        :param amount:
+
+    Raises:
+        :raises InsufficientBalance - if sender doesn't have enough money
+        :raises ReceiverNotFound - if receiver is not found
+
+    :return: ClientData - updated client wallet data of the sender, or None, if sender is not found
+    """
     async with get_asyncpg_connection() as conn:
         try:
             async with conn.transaction():
