@@ -2,12 +2,9 @@ from typing import Optional
 
 import asyncpg
 
+from errors import ReceiverNotFound, InsufficientBalance, ClientNotFound
 from models import ClientData
 from utils import get_asyncpg_connection
-
-
-class ClientNotFound(Exception):
-    pass
 
 
 async def create_client() -> ClientData:
@@ -46,19 +43,31 @@ async def top_up_client_balance(client_id: int, *, amount: float) -> Optional[Cl
     return ClientData(id=record["id"], balance=record["balance"])
 
 
-async def transfer_money(sender_id: int, *, receiver_id: int, amount: float) -> ClientData:
+async def transfer_money(sender_id: int, *, receiver_id: int, amount: float) -> Optional[ClientData]:
     async with get_asyncpg_connection() as conn:
-        async with conn.transaction():
-            record: asyncpg.Record = await conn.fetchrow(
-                "UPDATE client_wallet SET balance = balance - $1 WHERE id = $2 RETURNING id, balance",
-                amount,
-                sender_id,
-            )
-            await conn.execute("UPDATE client_wallet SET balance = balance + $1 WHERE id = $2", amount, receiver_id)
-            await conn.execute(
-                "INSERT INTO transaction_history(receiver_id, sender_id, amount) VALUES ($1, $2, $3)",
-                receiver_id,
-                sender_id,
-                amount,
-            )
+        try:
+            async with conn.transaction():
+                record: asyncpg.Record = await conn.fetchrow(
+                    "UPDATE client_wallet SET balance = balance - $1 WHERE id = $2 RETURNING id, balance",
+                    amount,
+                    sender_id,
+                )
+                if record is None:
+                    raise ClientNotFound
+                if record["balance"] < 0:
+                    raise InsufficientBalance
+                receiver_record = await conn.execute(
+                    "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2 RETURNING id", amount, receiver_id
+                )
+                if receiver_record is None:
+                    raise ReceiverNotFound
+                await conn.execute(
+                    "INSERT INTO transaction_history(receiver_id, sender_id, amount) VALUES ($1, $2, $3)",
+                    receiver_id,
+                    sender_id,
+                    amount,
+                )
+        except ClientNotFound:
+            return None
+
     return ClientData(id=record["id"], balance=record["balance"])
