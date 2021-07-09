@@ -1,7 +1,13 @@
+from typing import Optional
+
 import asyncpg
 
 from models import ClientData
 from utils import get_asyncpg_connection
+
+
+class ClientNotFound(Exception):
+    pass
 
 
 async def create_client() -> ClientData:
@@ -12,27 +18,35 @@ async def create_client() -> ClientData:
     return ClientData(id=record["id"], balance=record["balance"])
 
 
-async def get_client_by_id(client_id: int):
+async def get_client_by_id(client_id: int) -> Optional[ClientData]:
     async with get_asyncpg_connection() as conn:
         record: asyncpg.Record = await conn.fetchrow("SELECT id, balance FROM client_wallet WHERE id = $1", client_id)
-    return record
+    return ClientData(id=record["id"], balance=record["balance"]) if record is not None else None
 
 
-async def top_up_client_balance(client_id: int, *, amount: float):
+async def top_up_client_balance(client_id: int, *, amount: float) -> Optional[ClientData]:
     async with get_asyncpg_connection() as conn:
-        async with conn.transaction():
-            record: asyncpg.Record = await conn.fetchrow(
-                "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2 RETURNING id, balance",
-                amount,
-                client_id,
-            )
-            await conn.execute(
-                "INSERT INTO refill_history(client_id, amount) VALUES ($1, $2)", client_id, amount,
-            )
+        try:
+            async with conn.transaction():
+                record = await conn.fetchrow(
+                    "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2 RETURNING id, balance",
+                    amount,
+                    client_id,
+                )
+                # need to rollback transaction, even if it doesn't contain any active changes
+                if record is None:
+                    raise ClientNotFound
+                await conn.execute(
+                    "INSERT INTO refill_history(client_id, amount) VALUES ($1, $2)", client_id, amount,
+                )
+        except ClientNotFound:
+            # at this point, transaction will be rollbacked due to exception
+            return None
+
     return ClientData(id=record["id"], balance=record["balance"])
 
 
-async def transfer_money(sender_id: int, *, receiver_id: int, amount: float):
+async def transfer_money(sender_id: int, *, receiver_id: int, amount: float) -> ClientData:
     async with get_asyncpg_connection() as conn:
         async with conn.transaction():
             record: asyncpg.Record = await conn.fetchrow(

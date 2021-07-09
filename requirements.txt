@@ -5,4 +5,5 @@ uvicorn[standard]~=0.14.0
 
 # test deps
 pytest~=6.2.4
+pytest-subtests~=0.5.0
 requests~=2.25.1

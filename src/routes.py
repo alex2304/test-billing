@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 import logic
 from models import ClientData, TopUpRequest, TransferRequest
@@ -13,12 +13,18 @@ async def create_client():
 
 @router.get("/client/{client_id}", response_model=ClientData)
 async def get_client(client_id: int):
-    return await logic.get_client_by_id(client_id)
+    client_data: ClientData = await logic.get_client_by_id(client_id)
+    if not client_data:
+        raise HTTPException(status_code=404, detail=f"No client with such id")
+    return client_data
 
 
 @router.post("/client/{client_id}/topup", response_model=ClientData)
 async def top_up_client_balance(client_id: int, body: TopUpRequest):
-    return await logic.top_up_client_balance(client_id, amount=body.amount)
+    client_data: ClientData = await logic.top_up_client_balance(client_id, amount=body.amount)
+    if not client_data:
+        raise HTTPException(status_code=404, detail=f"No client with such id")
+    return client_data
 
 
 @router.post("/client/{sender_id}/transfer", response_model=ClientData)
