@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 import asyncpg
@@ -90,7 +91,7 @@ async def transfer_money(sender_id: int, *, receiver_id: int, amount: float) -> 
                     raise ClientNotFound
                 if record["balance"] < 0:
                     raise InsufficientBalance
-                receiver_record = await conn.execute(
+                receiver_record = await conn.fetchrow(
                     "UPDATE client_wallet SET balance = balance + $1 WHERE id = $2 RETURNING id", amount, receiver_id
                 )
                 if receiver_record is None:
